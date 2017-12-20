@@ -1,0 +1,119 @@
+/*
+ * client.c - An echo client
+ */
+/* $begin echoclientmain */
+#include "csapp.h"
+void *w_thread(void *vargp);
+void *r_thread(void *vargp);
+int flag=0;
+int main(int argc, char **argv) 
+{
+    int *clientfd;
+    pthread_t r_tid, w_tid;
+    char *host, *port,*name;
+    rio_t rio;
+
+    if (argc != 4) {
+	fprintf(stderr, "usage: %s <host> <port> <name>\n", argv[0]);
+	exit(0);
+    }
+    host = argv[1];
+    port = argv[2];
+    name = argv[3];
+    
+    clientfd= Malloc(sizeof(int));
+    *clientfd = Open_clientfd(host, port);
+    	
+    Rio_readinitb(&rio, *clientfd);
+	if (*clientfd != -1){
+	printf("@%s connected to the server\n", name);
+	strcat(name,"\n");
+	Rio_writen(*clientfd, name, strlen(name));
+	}
+	Pthread_create(&r_tid, NULL, w_thread, clientfd);
+	Pthread_create(&w_tid, NULL, r_thread, clientfd);
+	while(1){
+	//printf("> ");
+	//fflush(stdout);
+	}
+    printf("---------------3\n");
+   // Close(*clientfd); //line:netp:echoclient:close
+    //exit(0);
+}
+/* receive message*/
+void rx(int connfd){
+char buf[MAXLINE];
+rio_t rio;
+int n;
+Rio_readinitb(&rio, connfd);
+while((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0) {
+
+//printf ("%s ",buf);
+//strcat(buf,"> ");
+if(flag){
+if(strcmp(buf,"> \n")==0){
+flag=0;
+continue;
+
+}
+else{
+
+Fputs(buf,stdout);
+}
+}
+
+else{
+if(strcmp(buf,"GoodBye!\n")==0){
+Fputs(buf,stdout);
+
+return;
+}
+else{
+
+printf("\n");
+Fputs(buf,stdout);
+Fputs(">",stdout);
+fflush(stdout);
+}
+}
+//printf("-----");
+}
+}
+/*send messge*/
+void tx (int connfd){
+char buf[MAXLINE];
+rio_t rio;
+Rio_readinitb(&rio, connfd);
+while (Fgets(buf, MAXLINE, stdin) != NULL) {
+	if(strcmp(buf,"list-users\n")==0)
+	flag =1;
+	Rio_writen(connfd, buf, strlen(buf));	
+	printf("> ");
+    }
+}
+/* Thread routine */
+
+void *w_thread(void *vargp) 
+{  
+    int connfd = *((int *)vargp);
+	
+    Pthread_detach(pthread_self()); //line:conc:echoservert:detach
+    //Free(vargp);                    //line:conc:echoservert:free
+    tx(connfd);	
+    
+    Close(connfd);
+    return NULL;
+}
+void *r_thread(void *vargp) 
+{  
+    int connfd = *((int *)vargp);
+	printf("> ");
+    Pthread_detach(pthread_self()); //line:conc:echoservert:detach
+   // Free(vargp);                    //line:conc:echoservert:free
+    rx(connfd);	
+    
+    Close(connfd);
+    exit(0);
+    return NULL;
+}
+/* $end clientmain */
