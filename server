@@ -1,0 +1,162 @@
+/* 
+ * servert.c - A concurrent echo server using threads
+ */
+/* $begin echoservertmain */
+#include "csapp.h"
+char **members;
+void *thread(void *vargp);
+
+int getconfd (char * name)
+{
+int i;
+for (i =0; i<255;i++){
+    if (strcmp(members[i] ,name)==0)
+	return i;
+    }
+	//printf("%s not online\n",name);
+    return -1;
+}
+
+void echo(int connfd)
+{
+    int n;
+    int i;
+    int signup =0;
+    char buf[MAXLINE];
+    char temp[MAXLINE];
+    char temp1[MAXLINE];
+    rio_t rio;
+
+    Rio_readinitb(&rio, connfd);
+	
+	
+    while((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0) {
+        
+	
+       // printf("server received %d bytes\n", n);
+       /*register user */
+	if (!signup){
+	char temp2[MAXLINE];
+	strcpy(temp2,"@");
+	strcat(temp2,buf);
+	*strchr(temp2,'\n')='\0';
+	members[connfd]= temp2;
+        printf("%s joined\n", members[connfd]);
+	signup =1;
+        }
+        else {
+	char* sp;
+	int fd=0;
+	//char* name[MAXLINE] = members[connfd];
+		//if (strcmp(buf[0],"@")==0){
+		if (buf[0]=='@'){          
+                strcpy(temp,buf);
+		sp=strchr(temp,' ');
+		
+			if (sp==NULL){
+			continue;
+			}
+			else {
+			*sp='\0';
+			
+			strcpy(temp1,members[connfd]);
+			strcat(temp1," ");
+			strcat(temp1,sp+1);
+			
+				if (strcmp (temp,"@broadcast")==0){
+				// printf("----%c\n",buf[0]);
+					for (i =0; i<255;i++){
+						if (strcmp(members[i],"offline")!=0 &&strcmp(members[i],members[connfd])!=0){
+						Rio_writen(i, temp1, strlen(temp1));
+       						}
+					}
+				}
+				else if((fd = getconfd(temp))!=-1){
+				
+					Rio_writen(fd, temp1, strlen(temp1)); 
+				}
+				else{
+				printf("not recongnized command or username : %s",buf);
+				continue;
+				}	
+				
+			}
+
+                }
+        	
+		else if (strcmp(buf,"list-users\n")==0){
+	       
+	 		for (i =0; i<255;i++){
+				if (strcmp(members[i],"offline")!=0){
+				Rio_writen(connfd, members[i], strlen(members[i]));
+				Rio_writen(connfd,"\n", 1);
+				}
+    			}
+                             Rio_writen(connfd,"> \n", 3);
+		}
+		else if (strcmp(buf,"quit\n")==0){
+	
+		strcpy(temp, "GoodBye!\n");
+		Rio_writen(connfd, temp, strlen(temp));
+		return;
+		
+		}
+
+		
+		else{
+		printf("not recongnized command : %s",buf);
+				continue;
+		}
+	}
+	}
+  
+}
+int main(int argc, char **argv) 
+{
+    //initialize memberlist 
+    int i;
+    members = (char**)malloc(255*sizeof(char*));
+    for (i =0; i<255;i++){
+    members[i]=(char*)malloc(MAXLINE*sizeof(char));
+    }
+  for (i =0; i<255;i++){
+    members[i]="offline";
+    }	
+    int listenfd, *connfdp;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+    pthread_t tid; 
+    
+    if (argc != 2) {
+	fprintf(stderr, "usage: %s <port>\n", argv[0]);
+	exit(0);
+    }
+    listenfd = Open_listenfd(argv[1]);
+
+    while (1) {
+        clientlen=sizeof(struct sockaddr_storage);
+	connfdp = Malloc(sizeof(int)); //line:conc:echoservert:beginmalloc
+	*connfdp = Accept(listenfd, (SA *) &clientaddr, &clientlen); //line:conc:echoservert:endmalloc
+	
+	Pthread_create(&tid, NULL, thread, connfdp);
+    }
+}
+
+/* Thread routine */
+void *thread(void *vargp) 
+{  
+	char temp[MAXLINE];
+    int connfd = *((int *)vargp);
+	//printf("@%d connected \n", connfd);
+    Pthread_detach(pthread_self()); //line:conc:echoservert:detach
+    Free(vargp);                    //line:conc:echoservert:free
+    echo(connfd);	
+    
+strcpy(temp,"offline");
+ printf("%s left \n", members[connfd]);  
+members[connfd]= temp;
+	
+    Close(connfd);
+    return NULL;
+}
+/* $end servertmain */
